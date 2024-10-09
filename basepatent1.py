@@ -47,7 +47,7 @@ def display_csv_file(file_path):
 
     try:
         # Load only the first five rows of the CSV file
-        df = pd.read_csv(file_path, nrows=5)
+        df = pd.read_csv(file_path, nrows=100)
         
         # Create a new window to display the data
         if data_window:
