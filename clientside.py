@@ -21,24 +21,32 @@ all_captured_packets = []  # List to hold all captured packets for saving
 # Function to send packet data to server for prediction
 def send_to_server(packet_info):
     try:
-        # Format data as dictionary matching server expectations
-        data = [{
-            "IPV4_SRC_ADDR": packet_info[0],
-            "IPV4_DST_ADDR": packet_info[1],
-            "SRC_PORT": packet_info[2],
-            "DST_PORT": packet_info[3],
-            "PROTOCOL": packet_info[4],
-            "LENGTH": packet_info[5],
-            "PAYLOAD_LEN": packet_info[6]
-        }]
-        
+        # Format data as dictionary with the key 'Dataset'
+        data = {
+            "Dataset": [ {
+                "IPV4_SRC_ADDR": packet_info[0],
+                "IPV4_DST_ADDR": packet_info[1],
+                "SRC_PORT": packet_info[2],
+                "DST_PORT": packet_info[3],
+                "PROTOCOL": packet_info[4],
+                "LENGTH": packet_info[5],
+                "PAYLOAD_LEN": packet_info[6]
+            }]
+        }
+
         # Send data to server
         response = requests.post(SERVER_URL, json=data)
-        response_data = response.json()
+        
+        if response.status_code == 200:
+            response_data = response.json()
 
-        # Get the attack type from server response
-        attack_type = response_data[0].get("attack", "Unknown")
-        return attack_type
+            # Get the attack type from server response
+            attack_type = response_data[0].get("attack", "Unknown")  # Default to "Unknown" if not present
+            print(f"Received attack type from server: {attack_type}")  # Debug print
+            return attack_type
+        else:
+            print(f"Error from server: {response.status_code}")
+            return "Error"
 
     except Exception as e:
         print(f"Server error: {e}")
@@ -79,6 +87,10 @@ def process_packet(packet):
             # Get attack type prediction from the server
             attack_type = send_to_server(info)
 
+            # If no attack type is returned (error or normal), set it to "Normal"
+            if attack_type == "Error" or attack_type == "Unknown":
+                attack_type = "Normal"
+            
             # Add attack type to info tuple for display
             display_info = info + (attack_type,)
 

@@ -3,8 +3,10 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import confusion_matrix, classification_report
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import tensorflow as tf
-from keras import layers, models
+from keras import layers, models, regularizers
 import joblib
 
 # Load the dataset
@@ -41,8 +43,8 @@ joblib.dump(scaler, r"C:\Users\vivek\OneDrive\Desktop\proj\scaler.pkl")
 
 # Reshape data for CNN
 num_features = x_train.shape[1]
-x_train = x_train.reshape(-1, num_features, 1, 1)
-x_test = x_test.reshape(-1, num_features, 1, 1)
+x_train = x_train.reshape(-1, num_features, 1)  # Reshape for Conv1D
+x_test = x_test.reshape(-1, num_features, 1)  # Reshape for Conv1D
 
 # Encode labels
 label_encoder = LabelEncoder()
@@ -54,23 +56,58 @@ num_classes = len(label_encoder.classes_)
 y_train_onehot = tf.keras.utils.to_categorical(y_train_encoded, num_classes)
 y_test_onehot = tf.keras.utils.to_categorical(y_test_encoded, num_classes)
 
-# Define and compile the CNN model
+# Define and compile the CNN model using Conv1D layers
 model = models.Sequential()
-model.add(layers.Conv2D(32, (3, 1), activation='relu', input_shape=x_train.shape[1:]))
-model.add(layers.MaxPooling2D((2, 1)))
-model.add(layers.Conv2D(64, (3, 1), activation='relu'))
-model.add(layers.MaxPooling2D((2, 1)))
-model.add(layers.Conv2D(128, (3, 1), activation='relu'))
-model.add(layers.MaxPooling2D((2, 1)))
+
+# Conv1D layers
+model.add(layers.Conv1D(32, 3, activation='relu', input_shape=(num_features, 1)))  # Conv1D layer
+model.add(layers.MaxPooling1D(2))  # MaxPooling1D layer
+model.add(layers.Conv1D(64, 3, activation='relu'))  # Conv1D layer
+model.add(layers.MaxPooling1D(2))  # MaxPooling1D layer
+model.add(layers.Conv1D(128, 3, activation='relu'))  # Conv1D layer
+model.add(layers.MaxPooling1D(2))  # MaxPooling1D layer
+
+# Flatten and Dense layers
 model.add(layers.Flatten())
-model.add(layers.Dense(128, activation='relu'))
+model.add(layers.Dense(128, activation='relu', kernel_regularizer=regularizers.l2(0.01)))  # Added L2 regularization
+model.add(layers.Dropout(0.5))  # Dropout layer to prevent overfitting
 model.add(layers.Dense(num_classes, activation='softmax'))
 
 # Compile the model
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
+# Custom Early Stopping Implementation
+def early_stopping(train_history, patience=5):
+    """
+    Custom early stopping function to monitor validation loss and stop training if
+    the validation loss does not improve for `patience` epochs.
+    """
+    best_val_loss = np.inf
+    epochs_without_improvement = 0
+    best_weights = None
+    
+    for epoch in range(len(train_history.history['val_loss'])):
+        val_loss = train_history.history['val_loss'][epoch]
+        
+        # If validation loss improves, reset the counter and save the weights
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            epochs_without_improvement = 0
+            best_weights = model.get_weights()
+        else:
+            epochs_without_improvement += 1
+        
+        # If no improvement for 'patience' epochs, stop training
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping triggered at epoch {epoch+1}.")
+            model.set_weights(best_weights)
+            break
+
 # Train the model
-model.fit(x_train, y_train_onehot, epochs=20, batch_size=32, validation_data=(x_test, y_test_onehot), verbose=1)
+history = model.fit(x_train, y_train_onehot, epochs=20, batch_size=32, validation_data=(x_test, y_test_onehot), verbose=1)
+
+# Apply early stopping manually
+early_stopping(history, patience=5)
 
 # Save the model after training
 model.save(r"C:\Users\vivek\OneDrive\Desktop\proj\nids_model.h5")
